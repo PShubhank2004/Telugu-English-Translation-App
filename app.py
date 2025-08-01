@@ -77,12 +77,12 @@ def batch_translate(input_sentences, src_lang, tgt_lang, model, tokenizer, ip):
     return translations
 
 # --- UI Rendering ---
-st.title("🇮🇳 Telugu ↔ English AI Translator")
+st.title("Telugu ↔ English AI Translator")
 
 # Load models and display status
 with st.spinner("Loading AI models... This might take a moment on first startup."):
     ip, en_to_ind_model, en_to_ind_tokenizer, ind_to_en_model, ind_to_en_tokenizer = initialize_models()
-st.success("✅ Models loaded and ready!")
+st.success("Models loaded.")
 st.divider()
 
 # --- Main UI Tabs ---
