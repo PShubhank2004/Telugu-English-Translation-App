@@ -1,10 +1,8 @@
 # 🇮🇳 Telugu ↔ English AI Translator & Transliterator
 
-![App Screenshot](app_screenshot.png)
+[![Live Demo](https://img.shields.io/badge/Live-Demo-blue?style=for-the-badge&logo=streamlit)](https://telugu-english-translation-app-r-adarsh-0120.streamlit.app/)
 
 A clean, fast, and intuitive web application for high-quality translation between English and Telugu, and for transliterating between the Telugu script and ITRANS (English keyboard). This app is built with Streamlit and powered by AI4Bharat's state-of-the-art IndicTrans2 models.
-
-The live application is deployed on Streamlit Community Cloud.
 
 ## ✨ Features
 
@@ -40,16 +38,15 @@ To run this application on your local machine, please follow these steps.
 ### Prerequisites
 
 * Git
-* Python (version 3.9, 3.10, or 3.11 is recommended)
+* Python (version 3.11 is recommended)
 * `pip` and `venv`
 
 ### 1. Clone the Repository
 
 ```bash
-git clone [https://github.com/adarsh-0120/your-repo-name.git](https://github.com/adarsh-0120/your-repo-name.git)
-cd your-repo-name
+git clone [https://github.com/adarsh-0120/telugu-english-translation-app.git](https://github.com/adarsh-0120/telugu-english-translation-app.git)
+cd telugu-english-translation-app
 ```
-*(Replace `your-repo-name` with the actual name of your repository)*
 
 ### 2. Create and Activate a Virtual Environment
 
@@ -91,6 +88,6 @@ streamlit run app.py
 
 The application should now be open and running in your web browser!
 
-## 🙏 Acknowledgements
+## Acknowledgements
 
 This project would not be possible without the incredible work done by the **AI4Bharat** team in creating and open-sourcing the **IndicTrans2** models. Their contributions to Indian language AI are foundational to this application.
