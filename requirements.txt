@@ -1,0 +1,15 @@
+streamlit
+torch
+transformers>=4.33.2
+sentencepiece
+sacremoses
+accelerate
+bitsandbytes
+scipy
+datasets
+pandas
+regex
+mock
+mosestokenizer
+indic-transliteration==2.3.2
+git+https://github.com/VarunGumma/IndicTransToolkit.git
