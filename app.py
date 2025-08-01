@@ -135,4 +135,4 @@ with main_tab2:
             st.error(f"An error occurred during transliteration: {e}")
 
 st.divider()
-st.markdown("<p style='text-align: center;'>Made with ❤️</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Made by Adarsh</p>", unsafe_allow_html=True)
