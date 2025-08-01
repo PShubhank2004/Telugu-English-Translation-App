@@ -1,5 +1,4 @@
-from IndicTransToolkit.IndicTransToolkit.processor import IndicProcessor
-
+from IndicTransToolkit.processor import IndicProcessor
 import streamlit as st
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
 from indic_transliteration.sanscript import transliterate, ITRANS, DEVANAGARI, TELUGU
