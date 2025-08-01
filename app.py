@@ -133,6 +133,3 @@ with main_tab2:
                 st.info(reverse_itrans)
         except Exception as e:
             st.error(f"An error occurred during transliteration: {e}")
-
-st.divider()
-st.markdown("<p style='text-align: center;'>Made by Adarsh</p>", unsafe_allow_html=True)
