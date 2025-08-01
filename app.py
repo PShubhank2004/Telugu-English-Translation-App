@@ -1,190 +1,159 @@
-from IndicTransToolkit.processor import IndicProcessor
+# -*- coding: utf-8 -*-
 import streamlit as st
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
-from indic_transliteration.sanscript import transliterate, ITRANS, DEVANAGARI, TELUGU
 import torch
-import regex as re # For cleaning transliterated output in post-processing
+from transformers import AutoModelForSeq2SeqLM, BitsAndBytesConfig, AutoTokenizer
+from indic_transliteration.sanscript import transliterate, ITRANS, TELUGU
+from IndicTransToolkit.processor import IndicProcessor
+import time
 
-# Constants
+# --- Constants and Configuration ---
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 4
+# Set quantization to None as free tier doesn't support GPU-based quantization well
+QUANTIZATION = None 
 
+# --- Model Loading ---
+# This function will be cached by Streamlit, so models are loaded only once.
 @st.cache_resource
-def load_model_and_tokenizer(model_path, quantization=None):
+def initialize_models():
     """
-    Loads a pre-trained Hugging Face model and tokenizer.
-    Uses caching to avoid reloading on every Streamlit rerun.
-    Supports 4-bit and 8-bit quantization for memory efficiency.
+    Loads and initializes all the required models and tokenizers.
     """
-    if quantization == "4-bit":
+    # Initialize IndicProcessor
+    ip = IndicProcessor(inference=True)
+
+    # Determine quantization configuration
+    if QUANTIZATION == "4-bit":
         qconfig = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_use_double_quant=True,
-            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_compute_dtype=torch.bfloat16
         )
-    elif quantization == "8-bit":
+    elif QUANTIZATION == "8-bit":
         qconfig = BitsAndBytesConfig(
             load_in_8bit=True,
             bnb_8bit_use_double_quant=True,
-            bnb_8bit_compute_dtype=torch.bfloat16,
+            bnb_8bit_compute_dtype=torch.bfloat16
         )
     else:
         qconfig = None
 
-    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-    model = AutoModelForSeq2SeqLM.from_pretrained(
-        model_path,
+    # --- English to Indic Model ---
+    en_to_ind_ckpt_dir = "ai4bharat/indictrans2-en-indic-1B"
+    en_to_ind_tokenizer = AutoTokenizer.from_pretrained(en_to_ind_ckpt_dir, trust_remote_code=True)
+    en_to_ind_model = AutoModelForSeq2SeqLM.from_pretrained(
+        en_to_ind_ckpt_dir,
         trust_remote_code=True,
-        low_cpu_mem_usage=True, # Optimize for lower CPU memory usage
-        quantization_config=qconfig,
+        low_cpu_mem_usage=True,
+        quantization_config=qconfig
+    )
+
+    # --- Indic to English Model ---
+    ind_to_en_ckpt_dir = "ai4bharat/indictrans2-indic-en-1B"
+    ind_to_en_tokenizer = AutoTokenizer.from_pretrained(ind_to_en_ckpt_dir, trust_remote_code=True)
+    ind_to_en_model = AutoModelForSeq2SeqLM.from_pretrained(
+        ind_to_en_ckpt_dir,
+        trust_remote_code=True,
+        low_cpu_mem_usage=True,
+        quantization_config=qconfig
     )
 
     if qconfig is None:
-        # Move model to GPU and convert to half precision if not quantized
-        model = model.to(DEVICE)
+        en_to_ind_model = en_to_ind_model.to(DEVICE)
+        ind_to_en_model = ind_to_en_model.to(DEVICE)
+        # Using .half() can cause issues on CPU, so we might skip it if no CUDA.
         if DEVICE == "cuda":
-            model.half()
+            en_to_ind_model.half()
+            ind_to_en_model.half()
+            
+    en_to_ind_model.eval()
+    ind_to_en_model.eval()
 
-    model.eval() # Set model to evaluation mode
-    return tokenizer, model
+    return ip, en_to_ind_model, en_to_ind_tokenizer, ind_to_en_model, ind_to_en_tokenizer
 
-def batch_translate(input_sentences: list[str], src_lang_ip: str, tgt_lang_ip: str, model, tokenizer, ip: IndicProcessor) -> list[str]:
+# --- Core Functions ---
+def batch_translate(input_sentences, src_lang, tgt_lang, model, tokenizer, ip):
     """
-    Translates a batch of sentences using the provided model and tokenizer.
-    Preprocesses input with IndicProcessor and adds language tags for the model.
+    Translates a batch of sentences.
     """
     translations = []
-    
-    # Iterate through input sentences in batches
     for i in range(0, len(input_sentences), BATCH_SIZE):
-        batch = input_sentences[i : i + BATCH_SIZE]
+        batch = ip.preprocess_batch(input_sentences[i:i+BATCH_SIZE], src_lang=src_lang, tgt_lang=tgt_lang)
         
-        # 1. Preprocess batch using IndicProcessor.
-        # This handles normalization and other language-specific preprocessing for the source.
-        preprocessed_batch = ip.preprocess_batch(batch, src_lang_ip) 
-        
-        # 2. Construct input for the IndicTrans2 tokenizer.
-        # The tokenizer expects the format "src_lang_code tgt_lang_code actual_text".
-        inputs_for_tokenizer = [f"{src_lang_ip} {tgt_lang_ip} {sentence}" for sentence in preprocessed_batch]
-        
-        # 3. Tokenize the prepared input.
-        # This converts the text into numerical IDs that the model can understand.
-        inputs = tokenizer(
-            inputs_for_tokenizer, 
-            truncation=True, # Truncate long sentences
-            padding="longest", # Pad shorter sentences to the longest in the batch
-            return_tensors="pt" # Return PyTorch tensors
-        ).to(DEVICE)
+        # Move inputs to the correct device
+        inputs = tokenizer(batch, truncation=True, padding="longest", return_tensors="pt").to(DEVICE)
 
-        # 4. Generate translations using the model.
-        with torch.no_grad(): # Disable gradient calculation for inference (saves memory and speeds up)
+        with torch.no_grad():
             generated_tokens = model.generate(
                 **inputs,
-                use_cache=True, # Use cache for faster generation
-                min_length=0, # Minimum length of generated sequence
-                max_length=256, # Maximum length of generated sequence
-                num_beams=5, # Number of beams for beam search (for better quality)
-                num_return_sequences=1, # Return only the top sequence
+                use_cache=True,
+                min_length=0,
+                max_length=256,
+                num_beams=5,
+                num_return_sequences=1,
             )
 
-        # 5. Decode the generated token IDs back into human-readable text.
-        # `skip_special_tokens=True` removes special tokens like [CLS], [SEP], language tags.
-        decoded = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+        decoded_tokens = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
         
-        # Add decoded translations to the list.
-        # For this setup, we are directly using the decoded output, and applying
-        # post-processing (like script conversion) later in the Streamlit UI logic.
-        translations.extend(decoded) 
+        # Post-process the translations from the model
+        processed_sents = ip.postprocess_batch(decoded_tokens, lang=tgt_lang)
+
+        # Add a manual cleaning step to remove the specific leftover tags you found
+        cleaned_sents = [
+            s.replace("Tel_Telu None ", "").replace("ng @Latn ", "").strip()
+            for s in processed_sents
+        ]
+
+        translations += cleaned_sents
 
     return translations
 
-# --- Main Streamlit Application Logic ---
+# --- Streamlit UI ---
+st.set_page_config(page_title="Telugu-English Translation", layout="wide")
 
-# Load models
-with st.spinner("Loading models..."):
-    # Load English to Indic (e.g., English to Telugu) model
-    en_to_indic_tokenizer, en_to_indic_model = load_model_and_tokenizer("ai4bharat/indictrans2-en-indic-1B")
+st.title("Telugu ↔ English Translator & Transliterator 🇮🇳")
+
+# Load models and display status
+with st.spinner("Loading translation models... This may take a moment."):
+    start_time = time.time()
+    ip, en_to_ind_model, en_to_ind_tokenizer, ind_to_en_model, ind_to_en_tokenizer = initialize_models()
+    end_time = time.time()
+st.success(f"✅ Models loaded successfully in {end_time - start_time:.2f} seconds!")
+
+
+# --- UI Tabs ---
+tab1, tab2 = st.tabs(["🔤 Transliteration", "🌐 Translation"])
+
+with tab1:
+    st.header("Transliteration (ITRANS ↔ Telugu)")
+    st.markdown("Convert Telugu text written in the English alphabet (ITRANS) to the native Telugu script and back.")
     
-    # Load Indic to English (e.g., Telugu to English) model
-    indic_to_en_tokenizer, indic_to_en_model = load_model_and_tokenizer("ai4bharat/indictrans2-indic-en-1B")
+    itrans_input = st.text_area("Enter text in ITRANS format (e.g., 'namaste')")
+    if itrans_input:
+        try:
+            telugu_script = transliterate(itrans_input, ITRANS, TELUGU)
+            st.success(f"**Telugu Script:** {telugu_script}")
+            
+            reverse_itrans = transliterate(telugu_script, TELUGU, ITRANS)
+            st.info(f"**Back to ITRANS:** {reverse_itrans}")
+        except Exception as e:
+            st.error(f"An error occurred during transliteration: {e}")
+
+with tab2:
+    st.header("Translation using IndicTrans2")
+    st.markdown("Translate text between English and Telugu using AI4Bharat's state-of-the-art model.")
+
+    direction = st.radio("Select Translation Direction", ["English ➜ Telugu", "Telugu ➜ English"], horizontal=True)
     
-    # Initialize IndicProcessor for text normalization and preparation
-    ip = IndicProcessor(inference=True)
+    input_text = st.text_area("Enter text to translate:")
 
-# Streamlit UI
-st.title("Telugu ↔ English Translator 🇮🇳")
-mode = st.selectbox("Select Translation Direction", ["English ➜ Telugu", "Telugu ➜ English"])
-
-user_input = st.text_area("Enter your sentence:")
-
-if st.button("Translate"):
-    if not user_input.strip():
-        st.warning("Please enter a sentence to translate.")
-    else:
-        result = "" # Initialize result variable
-        if mode == "English ➜ Telugu":
-            src_lang_ip, tgt_lang_ip = "eng_Latn", "tel_Telu"
-            
-            # Get raw translation from the model (might be in Devanagari even for Telugu target)
-            raw_translation_list = batch_translate([user_input], src_lang_ip, tgt_lang_ip, en_to_indic_model, en_to_indic_tokenizer, ip)
-            raw_translation = raw_translation_list[0]
-            
-            # Post-process: Transliterate from Devanagari to Telugu script if necessary.
-            # This handles cases where the model outputs Telugu words in Devanagari script.
-            try:
-                result = transliterate(raw_translation, DEVANAGARI, TELUGU)
-            except Exception as e:
-                # Fallback to raw if transliteration fails (e.g., input wasn't Devanagari)
-                st.info(f"Could not transliterate from Devanagari to Telugu for Eng->Tel. Raw output used: {e}")
-                result = raw_translation 
-
-        else: # Telugu ➜ English
-            src_lang_ip, tgt_lang_ip = "tel_Telu", "eng_Latn"
-            
-            # For Telugu to English, we assume user input is already in Telugu script.
-            # No ITRANS transliteration of input is needed here.
-            user_input_for_model = user_input 
-            
-            # Get raw translation from the model.
-            # As confirmed, this model outputs in Devanagari for Telugu->English.
-            raw_translation_list = batch_translate([user_input_for_model], src_lang_ip, tgt_lang_ip, indic_to_en_model, indic_to_en_tokenizer, ip)
-            raw_translation = raw_translation_list[0]
-
-            # --- MANDATORY POST-PROCESSING FOR TELUGU->ENGLISH ---
-            # This step is critical because the IndicTrans2-Indic-En model
-            # typically outputs in Devanagari script for Telugu->English,
-            # not directly in Latin script. We force it to Latin script (ITRANS).
-            translated_text_latin = raw_translation # Initialize with raw output
-
-            try:
-                # 1. Transliterate from Devanagari (model's actual output) to ITRANS (Latin-based scheme)
-                # This ensures the output is always in Latin characters.
-                translated_text_latin = transliterate(raw_translation, DEVANAGARI, ITRANS)
-                
-                # 2. Apply common heuristics to make ITRANS output more readable as English.
-                # These are approximations and will not fix semantic translation errors.
-                translated_text_latin = translated_text_latin.replace("aa", "a").replace("ii", "i").replace("uu", "u")
-                translated_text_latin = translated_text_latin.replace("ee", "e").replace("oo", "o")
-                translated_text_latin = translated_text_latin.replace("ai", "e").replace("au", "o") 
-                
-                # Remove any remaining non-standard Latin characters or transliteration marks.
-                translated_text_latin = re.sub(r'[\u0300-\u036F]', '', translated_text_latin) # Combining diacritics
-                translated_text_latin = translated_text_latin.replace('~', '').replace('\'', '') # Tilde, apostrophe
-                translated_text_latin = translated_text_latin.replace('`', '').replace('|', '').replace('.', '') # Backtick, danda, period if not sentence end
-                
-                # Clean up multiple spaces that might result from replacements
-                translated_text_latin = re.sub(r'\s+', ' ', translated_text_latin).strip()
-
-                # Capitalize the first letter of the sentence for readability
-                if translated_text_latin:
-                    result = translated_text_latin[0].upper() + translated_text_latin[1:]
+    if st.button("Translate"):
+        if not input_text.strip():
+            st.warning("Please enter some text to translate.")
+        else:
+            with st.spinner("Translating..."):
+                if direction == "English ➜ Telugu":
+                    result = batch_translate([input_text], "eng_Latn", "tel_Telu", en_to_ind_model, en_to_ind_tokenizer, ip)
                 else:
-                    result = "" # Handle empty string case
-
-            except Exception as e:
-                # If transliteration fails (e.g., input was already Latin, or unusual characters)
-                st.warning(f"Error during Devanagari to English script transliteration (Tel->Eng): {e}. Displaying raw model output (which might be in Devanagari or problematic Latin).")
-                result = raw_translation # Fallback to raw output if script conversion fails
-
-        st.success("Translation:")
-        st.write(result)
+                    result = batch_translate([input_text], "tel_Telu", "eng_Latn", ind_to_en_model, ind_to_en_tokenizer, ip)
+            st.success(f"**Translation:** {result[0]}")
