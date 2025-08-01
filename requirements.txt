@@ -1,9 +1,9 @@
 streamlit
-torch
-transformers>=4.33.2
+torch==2.1.0
+transformers==4.35.2
 sentencepiece
 sacremoses
-accelerate
+accelerate==0.25.0
 bitsandbytes
 scipy
 datasets
