@@ -1,5 +1,5 @@
 streamlit
-torch==2.2.0
+torch==2.7.1
 transformers==4.38.1
 sentencepiece
 sacremoses
