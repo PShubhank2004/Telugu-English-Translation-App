@@ -9,7 +9,7 @@ import time
 # --- Page Configuration ---
 st.set_page_config(
     page_title="IndicTrans2 | Telugu-English",
-    page_icon="🇮🇳",
+    page_icon="🌏",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -133,3 +133,4 @@ with main_tab2:
                 st.info(reverse_itrans)
         except Exception as e:
             st.error(f"An error occurred during transliteration: {e}")
+
