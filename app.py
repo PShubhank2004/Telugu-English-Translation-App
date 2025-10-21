@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+'''# -*- coding: utf-8 -*-
 import traceback
 import warnings
 
@@ -145,5 +145,120 @@ with col2:
                 except Exception as e:
                     st.error("Translation failed. Check logs.")
                     st.text(traceback.format_exc())
+        else:
+            st.warning("Please enter some text to translate.")
+'''
+
+
+
+
+
+
+
+# -*- coding: utf-8 -*-
+import traceback
+import warnings
+
+import streamlit as st
+from transformers import pipeline
+from indic_transliteration.sanscript import transliterate, ITRANS, TELUGU
+from IndicTransToolkit.processor import IndicProcessor
+
+# ------------------------------
+# Ignore warnings
+warnings.filterwarnings("ignore")
+
+# --- Page Configuration ---
+st.set_page_config(
+    page_title="IndicTrans2 | Telugu-English",
+    page_icon="🌏",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+# --- Constants ---
+DEVICE = -1  # CPU for Hugging Face pipeline
+
+# --- Initialize models ---
+@st.cache_resource(show_spinner=False)
+def initialize_models():
+    """Load smaller translation models (CPU-friendly, public)"""
+    ip = IndicProcessor(inference=True)
+
+    # English -> Telugu
+    en_to_te_translator = pipeline(
+        task="translation",
+        model="VijayChandra/english-to-telugu-translator-nllb",
+        src_lang="eng_Latn",
+        tgt_lang="tel_Telu",
+        device=DEVICE
+    )
+
+    # Telugu -> English
+    te_to_en_translator = pipeline(
+        task="translation",
+        model="ai4bharat/IndicBARTSS",
+        src_lang="tel_Telu",
+        tgt_lang="eng_Latn",
+        device=DEVICE
+    )
+
+    return ip, en_to_te_translator, te_to_en_translator
+
+# --- Translation Function ---
+def translate_text(text, direction="en_to_te"):
+    """Translate single string using the chosen pipeline"""
+    if direction == "en_to_te":
+        return en_to_te_translator(text)[0]['translation_text']
+    else:
+        return te_to_en_translator(text)[0]['translation_text']
+
+# --- Main App ---
+st.title("Telugu ↔ English AI Translator")
+
+# Load models
+try:
+    with st.spinner("Loading AI models… This may take a few seconds on first run."):
+        ip, en_to_te_translator, te_to_en_translator = initialize_models()
+    st.success("✅ Models loaded successfully! Ready to translate.")
+except Exception:
+    st.error("🚨 Failed to load AI models.")
+    st.text(traceback.format_exc())
+    st.stop()
+
+# --- UI Layout ---
+col1, col2 = st.columns(2)
+
+# English -> Telugu
+with col1:
+    st.markdown("#### English ➡️ Telugu")
+    en_input = st.text_area("Enter English text:", key="en_input", height=150)
+    if st.button("Translate to Telugu", use_container_width=True):
+        if en_input.strip():
+            try:
+                with st.spinner("Translating…"):
+                    translated = translate_text(en_input, "en_to_te")
+                    st.info("Telugu Translation:")
+                    st.markdown(f"> {translated}")
+            except Exception:
+                st.error("Translation failed. Check logs.")
+                st.text(traceback.format_exc())
+        else:
+            st.warning("Please enter some text to translate.")
+
+# Telugu -> English
+with col2:
+    st.markdown("#### Telugu ➡️ English")
+    te_input = st.text_area("Enter Telugu text:", key="te_input", height=150)
+    if st.button("Translate to English", use_container_width=True):
+        if te_input.strip():
+            try:
+                with st.spinner("Translating…"):
+                    translated = translate_text(te_input, "te_to_en")
+                    st.info("English Translation:")
+                    st.markdown(f"> {translated}")
+            except Exception:
+                st.error("Translation failed. Check logs.")
+                st.text(traceback.format_exc())
         else:
             st.warning("Please enter some text to translate.")
