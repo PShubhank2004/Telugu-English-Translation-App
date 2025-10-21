@@ -146,7 +146,7 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 # 1. NEW MODEL: Switched to a significantly smaller model (mT5-small)
 # to avoid Out-of-Memory (OOM) errors on Streamlit Community Cloud.
 # This model is ~1.2 GB (Float32) compared to the NLLB-600M model's 2.4 GB.
-MODEL_NAME = "google/mt5-small"
+MODEL_NAME = "Helsinki-NLP/opus-mt-en-te"#"google/mt5-small"
 SOURCE_LANG_CODE = "te" # Telugu
 TARGET_LANG_CODE = "en" # English
 
