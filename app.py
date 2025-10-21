@@ -160,7 +160,9 @@ def load_model():
     """Loads the model and tokenizer from Hugging Face."""
     try:
         # Load the model and tokenizer in full precision (no bitsandbytes needed)
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        #tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        # New line (Fixes the error by forcing the slow/SentencePiece tokenizer):
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=False)
         model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
         return tokenizer, model
     except Exception as e:
