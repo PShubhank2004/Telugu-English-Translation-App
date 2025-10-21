@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+'''# -*- coding: utf-8 -*-
 import traceback
 import warnings
 
@@ -136,4 +136,96 @@ with col2:
                     st.error("Translation failed. Check logs.")
                     st.text(traceback.format_exc())
         else:
-            st.warning("Please enter some text to translate.")
+            st.warning("Please enter some text to translate.")'''
+
+import streamlit as st
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+# --- CONFIGURATION AND SETUP ---
+
+# 1. NEW MODEL: Switched to a significantly smaller model (mT5-small)
+# to avoid Out-of-Memory (OOM) errors on Streamlit Community Cloud.
+# This model is ~1.2 GB (Float32) compared to the NLLB-600M model's 2.4 GB.
+MODEL_NAME = "google/mt5-small"
+SOURCE_LANG_CODE = "te" # Telugu
+TARGET_LANG_CODE = "en" # English
+
+# mT5 uses specific prefixes for translation tasks
+# The 'en' prefix tells the model the target language should be English.
+MT5_ENCODE_PREFIX = f"translate {SOURCE_LANG_CODE} to {TARGET_LANG_CODE}: "
+
+# Use Streamlit's cache to load the model only once
+@st.cache_resource
+def load_model():
+    """Loads the model and tokenizer from Hugging Face."""
+    try:
+        # Load the model and tokenizer in full precision (no bitsandbytes needed)
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
+        return tokenizer, model
+    except Exception as e:
+        st.error(f"Error loading model {MODEL_NAME}: {e}")
+        st.info("The app will not work until the model loads correctly.")
+        return None, None
+
+tokenizer, model = load_model()
+
+# --- TRANSLATION FUNCTION ---
+
+def translate_te_to_en(text_to_translate):
+    """Encodes the input, generates the translation, and decodes the output."""
+    if not model or not tokenizer:
+        return "Model not loaded. Please check the deployment logs."
+
+    # 1. Add the necessary prefix for mT5 translation
+    input_text = MT5_ENCODE_PREFIX + text_to_translate
+
+    # 2. Encode the input text
+    # We use a context manager to ensure tensors are moved to CPU if necessary
+    # (Streamlit free tier is CPU-only)
+    with st.spinner("Translating..."):
+        input_ids = tokenizer.encode(input_text, return_tensors="pt")
+
+        # 3. Generate the translation
+        # NOTE: Using sensible defaults for generation parameters
+        output_ids = model.generate(
+            input_ids,
+            max_length=150,
+            num_beams=4,
+            do_sample=False,  # Use beam search for higher quality
+            # mT5 does not strictly require a decoder_start_token_id for simple translation
+        )
+
+        # 4. Decode the generated IDs
+        translated_text = tokenizer.decode(output_ids.tolist()[0], skip_special_tokens=True)
+        return translated_text
+
+# --- STREAMLIT APP LAYOUT ---
+
+st.title("🇮🇳 Telugu (తెలుగు) to English Translator 🇬🇧 (v2 - mT5-small)")
+
+st.markdown("""
+This is a test application using the **smaller `google/mt5-small` model** to prevent memory (OOM) crashes on the Streamlit free cloud.
+""")
+
+# Input Area
+telugu_input = st.text_area(
+    "Enter Telugu Text Here:",
+    placeholder="ఉదాహరణకు: మీ పేరు ఏమిటి?",
+    height=150
+)
+
+# Translation Button
+if st.button("Translate", type="primary"):
+    if not telugu_input.strip():
+        st.warning("Please enter some Telugu text to translate.")
+    else:
+        # Perform Translation
+        translation = translate_te_to_en(telugu_input)
+
+        # Output Area
+        st.subheader("Translation Result:")
+        st.success(translation)
+
+st.markdown("---")
+st.caption(f"Model: {MODEL_NAME}")
