@@ -136,12 +136,6 @@ try:
             else:
                 st.warning("Please enter some text to translate.")
 
-'''except Exception as e:
-    st.error(f"Unexpected error occurred: {e}")
-    st.markdown("---")
-    st.markdown(
-        "**Tip:** Make sure your `HUGGING_FACE_HUB_TOKEN` is correct and you have a stable internet connection."
-    )'''
 except Exception as e:
     st.error("🚨 Unexpected error occurred while running the app.")
     st.markdown("---")
