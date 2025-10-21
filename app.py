@@ -5,6 +5,7 @@ from transformers import AutoModelForSeq2SeqLM, BitsAndBytesConfig, AutoTokenize
 from indic_transliteration.sanscript import transliterate, ITRANS, TELUGU
 from IndicTransToolkit.processor import IndicProcessor
 import time
+# trigger redeploy
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -133,4 +134,5 @@ with main_tab2:
                 st.info(reverse_itrans)
         except Exception as e:
             st.error(f"An error occurred during transliteration: {e}")
+
 
