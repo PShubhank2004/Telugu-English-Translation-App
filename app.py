@@ -38,8 +38,8 @@ def initialize_models():
     ip = IndicProcessor(inference=True)
 
     # Model names (pinned)
-    en_to_ind_model_name = "ai4bharat/indictrans2-en-indic-1B@main"
-    ind_to_en_model_name = "ai4bharat/indictrans2-indic-en-1B@main"
+    en_to_ind_model_name = "ai4bharat/indictrans2-en-indic-1B"
+    ind_to_en_model_name = "ai4bharat/indictrans2-indic-en-1B"
 
     # Load English -> Telugu
     en_to_ind_tokenizer = AutoTokenizer.from_pretrained(
