@@ -154,7 +154,7 @@ with col2:
 
 
 
-
+'''
 # -*- coding: utf-8 -*-
 import traceback
 import warnings
@@ -255,6 +255,125 @@ with col2:
             try:
                 with st.spinner("Translating…"):
                     translated = translate_text(te_input, "te_to_en")
+                    st.info("English Translation:")
+                    st.markdown(f"> {translated}")
+            except Exception:
+                st.error("Translation failed. Check logs.")
+                st.text(traceback.format_exc())
+        else:
+            st.warning("Please enter some text to translate.")'''
+
+
+
+
+
+
+
+# -*- coding: utf-8 -*-
+import traceback
+import warnings
+
+import streamlit as st
+from transformers import pipeline
+# We can remove this if we are not using the IndicProcessor in the final translation logic
+# from indic_transliteration.sanscript import transliterate, ITRANS, TELUGU
+# from IndicTransToolkit.processor import IndicProcessor
+
+# ------------------------------
+# Ignore warnings
+warnings.filterwarnings("ignore")
+
+# --- Page Configuration ---
+st.set_page_config(
+    page_title="NLLB | Telugu-English Translator",
+    page_icon="🌏",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+# --- Constants ---
+# Using the CPU (-1) device for the pipeline for compatibility with Streamlit free tier
+DEVICE = -1
+# NLLB Model that supports many languages, good for deployment
+NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
+
+# --- Initialize models ---
+@st.cache_resource(show_spinner=False)
+def initialize_models():
+    """Load a single NLLB translation model for both directions (smaller, public)."""
+
+    # Initialize the main multilingual pipeline
+    # The pipeline is smart enough to handle different src/tgt languages
+    translator_pipeline = pipeline(
+        task="translation",
+        model=NLLB_MODEL_NAME,
+        device=DEVICE,
+        # Set a common language pair/max length for initial config
+        src_lang="eng_Latn",
+        tgt_lang="tel_Telu"
+    )
+
+    # Note: We are removing IndicProcessor logic to simplify and avoid extra dependencies
+    # unless it's strictly required for NLLB models.
+    # ip = IndicProcessor(inference=True)
+
+    return translator_pipeline
+
+# --- Translation Function ---
+def translate_text(text, src_lang, tgt_lang, translator_pipeline):
+    """Translate single string using the NLLB pipeline, specifying src/tgt."""
+    # The NLLB pipeline expects the language codes defined by the model
+    result = translator_pipeline(
+        text,
+        src_lang=src_lang,
+        tgt_lang=tgt_lang
+    )
+    return result[0]['translation_text']
+
+# --- Main App ---
+st.title("Telugu ↔ English AI Translator (NLLB 600M)")
+
+# Load models
+try:
+    with st.spinner(f"Loading {NLLB_MODEL_NAME}… This may take a few minutes on first run."):
+        translator = initialize_models()
+    st.success("✅ Models loaded successfully! Ready to translate.")
+except Exception:
+    st.error("🚨 Failed to load AI models. There may be a temporary network issue or insufficient RAM.")
+    st.text(traceback.format_exc())
+    st.stop()
+
+# --- UI Layout ---
+col1, col2 = st.columns(2)
+
+# English -> Telugu
+with col1:
+    st.markdown("#### English (eng_Latn) ➡️ Telugu (tel_Telu)")
+    en_input = st.text_area("Enter English text:", key="en_input", height=150)
+    if st.button("Translate to Telugu", use_container_width=True):
+        if en_input.strip():
+            try:
+                with st.spinner("Translating…"):
+                    # Use the common language codes for NLLB
+                    translated = translate_text(en_input, "eng_Latn", "tel_Telu", translator)
+                    st.info("Telugu Translation:")
+                    st.markdown(f"> {translated}")
+            except Exception:
+                st.error("Translation failed. Check logs.")
+                st.text(traceback.format_exc())
+        else:
+            st.warning("Please enter some text to translate.")
+
+# Telugu -> English
+with col2:
+    st.markdown("#### Telugu (tel_Telu) ➡️ English (eng_Latn)")
+    te_input = st.text_area("Enter Telugu text:", key="te_input", height=150)
+    if st.button("Translate to English", use_container_width=True):
+        if te_input.strip():
+            try:
+                with st.spinner("Translating…"):
+                    # Use the common language codes for NLLB
+                    translated = translate_text(te_input, "tel_Telu", "eng_Latn", translator)
                     st.info("English Translation:")
                     st.markdown(f"> {translated}")
             except Exception:
