@@ -6,6 +6,8 @@
 
 
 # -*- coding: utf-8 -*-
+import traceback  # Add this at the top
+
 import streamlit as st
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
@@ -134,9 +136,18 @@ try:
             else:
                 st.warning("Please enter some text to translate.")
 
-except Exception as e:
+'''except Exception as e:
     st.error(f"Unexpected error occurred: {e}")
     st.markdown("---")
+    st.markdown(
+        "**Tip:** Make sure your `HUGGING_FACE_HUB_TOKEN` is correct and you have a stable internet connection."
+    )'''
+except Exception as e:
+    st.error("🚨 Unexpected error occurred while running the app.")
+    st.markdown("---")
+    st.markdown("**Error Details:**")
+    # Show full stack trace
+    st.text(traceback.format_exc())
     st.markdown(
         "**Tip:** Make sure your `HUGGING_FACE_HUB_TOKEN` is correct and you have a stable internet connection."
     )
